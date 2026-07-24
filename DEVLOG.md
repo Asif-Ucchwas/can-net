@@ -44,3 +44,29 @@
 - Full benchmark script will be extended in Stage 5 for CAN/J1939/RTOS comparisons.
 
 ## Stage 1 — COMPLETE (4/4 tasks)
+
+## Stage 2 — CAN Bus Fundamentals
+
+### Task 5: Virtual CAN interface (vcan0) via SocketCAN
+- Loaded vcan kernel module (`sudo modprobe vcan`) — confirmed native support in
+  WSL2 Ubuntu 24.04 kernel, no custom kernel build needed.
+- Created and activated virtual CAN interface: `ip link add dev vcan0 type vcan`
+  + `ip link set up vcan0`.
+- Installed can-utils (cansend, candump).
+- Verified end-to-end: `cansend vcan0 123#DEADBEEF` -> immediately visible via
+  `candump vcan0` as `vcan0  123   [4]  DE AD BE EF`.
+- Environment: WSL2 Ubuntu 24.04, can-utils 2023.03-1.
+
+### Task 6: Python pub/sub nodes (python-can) with CAN ID filtering
+- Installed python-can 4.6.1 via pip3 (--break-system-packages, per Ubuntu 24.04's
+  externally-managed-environment restriction).
+- Built can_publisher.py: sends fixed-rate frames on two CAN IDs (0x100, 0x200)
+  every 0.5s, alternating payload counters.
+- Built can_subscriber.py: uses SocketCAN's kernel-level can_filters (can_mask
+  0x7FF, full 11-bit match) to only receive 0x100 - filtering happens in the
+  kernel, not by checking every message in Python.
+- Verified end-to-end: publisher sent both IDs continuously; subscriber received
+  only 0x100 frames (61 messages, seq 0-60), 0x200 never surfaced - confirms
+  kernel-level filtering works correctly.
+- Fixed deprecation warning (bustype= -> interface=) and added bus.shutdown() in
+  a finally block for clean socket teardown on exit.
