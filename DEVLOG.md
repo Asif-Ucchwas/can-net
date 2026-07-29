@@ -213,3 +213,28 @@
 - Minor harmless warning noted: ccache 4.9.1 found but Zephyr wanted >=4.12,
   so ccache wasn't used for this build - doesn't affect correctness, only
   means rebuilds won't be cache-accelerated. Not worth fixing for this project.
+
+### Task 14: Zephyr CAN driver task connected to Stage 2/3 traffic (vcan0)
+- Investigated Zephyr's native_sim CAN support: found the built-in
+  `socketcan-native-sim` snippet, which bridges native_sim's CAN driver to a
+  real Linux SocketCAN interface via devicetree binding (zephyr,canbus -> can0,
+  compatible = "zephyr,native-linux-can").
+- Discovered native_sim's devicetree hardcodes the host interface name as
+  "zcan0" (not configurable via build flag) - worked around this by adding
+  zcan0 as a Linux altname on the existing vcan0 interface:
+  `sudo ip link property add dev vcan0 altname zcan0`. This means Zephyr's CAN
+  driver and all our Stage 2/3 Python tooling (python-can, cantools) now share
+  the exact same underlying virtual bus.
+- Built and ran samples/drivers/can/counter targeting native_sim with the
+  socketcan-native-sim snippet applied:
+  `west build -b native_sim -S socketcan-native-sim samples/drivers/can/counter`
+- Verified genuine bidirectional bridging with a separate `candump vcan0`
+  running concurrently: Zephyr's internal "Counter received: N" log values
+  matched exactly, byte-for-byte, with real CAN frames observed on vcan0
+  (id=0x00012345, incrementing hex payload 00 00 -> 00 F9 matching 0-249).
+  This confirms Zephyr's RTOS-scheduled CAN task is writing to and reading
+  from the real Linux SocketCAN interface, not an isolated internal loopback.
+- Added zephyr_project/ and zephyr_venv/ to .gitignore - these are large
+  (~1GB+) externally-reproducible directories (`west init` + `west update` +
+  `west sdk install` recreates them exactly), not our own code, so only our
+  custom application source will be tracked going forward.
