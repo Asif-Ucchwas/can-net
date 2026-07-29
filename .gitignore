@@ -2,3 +2,9 @@ __pycache__/
 *.pyc
 .vscode/
 *.log
+
+# Zephyr RTOS workspace - external source tree managed by `west`, not our code.
+# Reproducible via: west init zephyr_project && cd zephyr_project && west update
+# Only our custom application code (stage4_rtos/) should be tracked.
+zephyr_project/
+zephyr_venv/

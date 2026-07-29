@@ -194,3 +194,22 @@
   receiver could not have handled safely.
 
 ## Stage 3 — COMPLETE (4/4 tasks)
+
+## Stage 4 — RTOS Integration
+
+### Task 13: Zephyr RTOS running under QEMU
+- Installed Zephyr toolchain from scratch: system build deps (cmake, ninja, dtc,
+  gcc-multilib, etc.), west (Zephyr's meta build tool) in a dedicated Python venv
+  (zephyr_venv, kept isolated from the python-can/cantools environment used in
+  Stages 2-3), full Zephyr source tree via `west init` + `west update` (~884MB,
+  dozens of HAL/module repos), and Zephyr SDK 1.0.1 (arm-zephyr-eabi toolchain)
+  via `west sdk install`.
+- Confirmed end-to-end with samples/hello_world targeting qemu_cortex_m3 (emulated
+  ARM Cortex-M3, ti_lm3s6965 board): built successfully (134/134 targets, FLASH
+  3.70% used, RAM 6.27% used) and ran under QEMU, printing
+  "Hello World! qemu_cortex_m3/ti_lm3s6965" - confirms the full toolchain
+  (cross-compiler, device tree, CMake/Ninja build, QEMU emulation) works
+  end-to-end on this 8GB RAM laptop, no physical board required.
+- Minor harmless warning noted: ccache 4.9.1 found but Zephyr wanted >=4.12,
+  so ccache wasn't used for this build - doesn't affect correctness, only
+  means rebuilds won't be cache-accelerated. Not worth fixing for this project.
