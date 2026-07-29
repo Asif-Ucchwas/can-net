@@ -151,3 +151,46 @@
   ECU pacing the sender via flow-control frames) was intentionally skipped as
   out of scope for this stage - BAM covers the core fragmentation/reassembly
   concept that "most tutorials skip," which was the goal of this task.
+
+### Task 11: Diagnostic node requesting specific PGNs and parsing responses
+- Implemented J1939's Request PGN pattern (PGN 59904) - the request/response
+  mechanism used by real diagnostic tools, distinct from the broadcast-only
+  traffic built in Tasks 9-10.
+- j1939_ecu_responder.py: listens for Request PGN messages, parses the 3-byte
+  little-endian requested-PGN payload, and responds on-demand only for PGNs it
+  supports (EngineSpeed/61444, VehicleSpeed/65265) - ignores unsupported requests.
+- j1939_diagnostic_tool.py: sends requests using source address 0xF9 (the
+  conventional J1939 diagnostic tool address), with a timeout-based wait for
+  matching-PGN responses.
+- Verified end-to-end over vcan0, 3 test cases: (1) EngineSpeed request -> real
+  response, values matched within 0.125 rpm quantization; (2) VehicleSpeed
+  request -> real response, matched within 1/256 km/h quantization; (3) request
+  for unsupported PGN 65226 -> correctly timed out with no response, proving
+  the failure path works, not just the happy path.
+
+## Stage 3 — Task 12 (up next): stress-test with multiple simulated ECUs
+
+### Task 12: Stress-test with multiple simulated ECUs, verify interleaved multi-packet parsing
+- Upgraded the BAM receiver from Task 10's single-transfer (global state) design
+  to j1939_bam_multi_receiver.py, which tracks in-progress transfers keyed by
+  source address (dict of {src: {total_size, num_packets, frames}}). This allows
+  multiple ECUs to have simultaneous in-progress BAM transfers without one
+  corrupting another's reassembly.
+- Built j1939_bam_stress_sender.py: 3 simulated ECUs (Engine_ECU src=0x00,
+  Trans_ECU src=0x03, Brake_ECU src=0x0B) launched concurrently via threads,
+  each sending a distinct multi-packet fault message (36-42 bytes, 6 TP.DT
+  frames each) with only 20ms between their own frames - short enough that
+  frames from different ECUs genuinely interleave on the bus.
+- Verified over vcan0: receiver log shows true interleaving (e.g. src=0x00 seq=1
+  -> src=0x03 seq=1 -> src=0x00 seq=2 -> src=0x0B seq=1 -> src=0x03 seq=2...),
+  NOT sequential per-ECU batches. All 3 messages reassembled correctly and
+  independently despite the interleaving. Confirmed with candump capture: 21
+  frames logged (3 TP.CM + 18 TP.DT), matching expected count exactly.
+    src=0x00 -> "ENGINE_TEMP_HIGH_WARNING_COOLANT_LOW"
+    src=0x03 -> "TRANSMISSION_GEAR_SLIP_DETECTED_CODE_P0730"
+    src=0x0B -> "ABS_SENSOR_FAULT_REAR_LEFT_WHEEL_SPEED"
+- This confirms the per-source-address state tracking design is correct under
+  realistic concurrent multi-ECU bus load, which the single-transfer Task 10
+  receiver could not have handled safely.
+
+## Stage 3 — COMPLETE (4/4 tasks)
