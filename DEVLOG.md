@@ -112,3 +112,42 @@
   of the CAN bus during simultaneous transmission from multiple physical nodes).
 
 ## Stage 2 — COMPLETE (4/4 tasks)
+
+## Stage 3 — J1939 Protocol Layer
+
+### Task 9: J1939 PGN/SPN encoding on top of Stage 2 CAN nodes
+- Built j1939_ids.py: manual 29-bit extended CAN ID encoder/decoder implementing
+  the real J1939 layout (Priority[3 bits] + PGN[18 bits] + Source Address[8 bits]).
+  Self-test confirmed round-trip encode/decode correctness (0x0CF00400 -> priority=3,
+  pgn=61444, source=0).
+- Built j1939_signals.py: real, standardized SPN byte layouts -
+  SPN 190 (Engine Speed, PGN 61444/EEC1, bytes 3-4, 0.125 rpm/bit resolution) and
+  SPN 84 (Vehicle Speed, PGN 65265/CCVS1, bytes 1-2, 1/256 km/h resolution).
+- Built j1939_publisher.py / j1939_subscriber.py using is_extended_id=True (required
+  for J1939's 29-bit IDs, vs Stage 2's 11-bit standard IDs).
+- Verified end-to-end over vcan0: subscriber correctly identified messages by PGN
+  and decoded both signals; all values matched sender within expected quantization
+  (e.g., 3224.538 rpm sent -> 3224.5 decoded, matches 0.125 rpm resolution).
+
+### Task 10: Multi-packet transport (BAM/TP.CM) for messages >8 bytes
+- Implemented J1939's BAM (Broadcast Announce Message) transport protocol -
+  the mechanism for sending messages larger than CAN's native 8-byte frame limit.
+- j1939_bam.py: build_bam_cm_frame() constructs the TP.CM (PGN 60416) announcement
+  frame (total size + packet count + target PGN); fragment_message()/
+  reassemble_message() handle splitting into 7-byte TP.DT (PGN 60160) chunks
+  (1 byte per frame reserved for sequence number) and reassembling them back.
+  In-memory self-test passed first (51-byte fake diagnostic string -> 8 frames
+  -> exact reassembly).
+- j1939_bam_sender.py / j1939_bam_receiver.py: put this on the real vcan0 bus.
+  Sender transmits one TP.CM + 8 TP.DT frames with realistic ~50ms inter-frame
+  spacing. Receiver tracks transfer state (waiting for TP.CM -> collecting TP.DT
+  frames by sequence -> reassemble once count matches announced total).
+- Verified end-to-end over vcan0: receiver correctly reported "expecting 51 bytes
+  across 8 packets" from TP.CM, tracked all 8 TP.DT frames in order, and printed
+  the exact original message on reassembly - genuine live multi-frame CAN
+  transport, not just an in-memory simulation.
+- Scope limitation (documented, not implemented): only BAM (broadcast, no flow
+  control) was built. RTS/CTS (Connection Mode - point-to-point with destination
+  ECU pacing the sender via flow-control frames) was intentionally skipped as
+  out of scope for this stage - BAM covers the core fragmentation/reassembly
+  concept that "most tutorials skip," which was the goal of this task.
