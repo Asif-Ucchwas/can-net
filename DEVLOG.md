@@ -70,3 +70,45 @@
   kernel-level filtering works correctly.
 - Fixed deprecation warning (bustype= -> interface=) and added bus.shutdown() in
   a finally block for clean socket teardown on exit.
+
+### Task 7: DBC file + cantools decoding
+- Wrote vehicle.dbc defining VEHICLE_STATUS (id=0x100, 8 bytes) with three signals:
+  Speed (scale 0.01, km/h), RPM (scale 0.25, rpm), BatteryTemp (scale 1, offset -40,
+  degC) - validated parse-clean with cantools.database.load_file().
+- Built can_dbc_publisher.py: encodes realistic random values using message.encode(),
+  which handles scale/offset math automatically per the DBC definition.
+- Built can_dbc_decoder.py: uses db.decode_message() to turn raw CAN bytes back into
+  human-readable signal values; wrapped in try/except KeyError to skip any CAN ID
+  not defined in the DBC.
+- Verified end-to-end: every decoded value matched the publisher's sent value within
+  expected DBC quantization (e.g., RPM's 0.25 scale rounds to nearest quarter -
+  genuine precision limit of the signal definition, not a bug).
+- Note: minor floating-point display artifacts (e.g. 21.400000000000002) are normal
+  binary float representation quirks from the 0.01 scale factor, not decode errors.
+- Also added setup_vcan.sh - vcan0 doesn't persist across WSL2 restarts, so this
+  script recreates it at the start of any new session.
+
+
+### Task 8: Bus contention with multiple nodes, document arbitration
+- Built can_bus_contention.py: 3 simulated nodes (high_priority_brake id=0x010,
+  medium_priority_engine id=0x100, low_priority_infotainment id=0x500) each
+  flooding 50 frames simultaneously via separate threads on the same vcan0 bus.
+- Captured full bus traffic with `candump vcan0 -l` (150 frames logged, confirmed
+  50/50/50 split across the three IDs via awk/uniq -c analysis).
+- Observed interleaving: early burst where 0x010 sent 8 consecutive frames before
+  0x500's second frame appeared, settling into a roughly even interleaved pattern
+  by mid-log. This reflects Python thread/GIL scheduling behavior, NOT real CAN
+  arbitration.
+- Key distinction documented: on real CAN hardware, simultaneous transmission is
+  resolved by the CAN ID itself during the arbitration field of the frame - lower
+  numeric ID wins non-destructively (dominant bit dominates recessive bit during
+  bitwise arbitration), and losing nodes back off and automatically retry with
+  zero data corruption or restart delay. This happens at the physical/electrical
+  layer in real hardware and cannot be observed on a virtual vcan0 interface,
+  since the kernel just queues frames from whichever thread submits first - no
+  real electrical contention exists in software emulation.
+- This is a genuine limitation of Stage 2 (software-only) - true arbitration
+  timing validation is deferred to Stage 7 (real hardware, oscilloscope capture
+  of the CAN bus during simultaneous transmission from multiple physical nodes).
+
+## Stage 2 — COMPLETE (4/4 tasks)

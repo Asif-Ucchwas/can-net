@@ -1,0 +1,45 @@
+VERSION ""
+
+NS_ :
+    NS_DESC_
+    CM_
+    BA_DEF_
+    BA_
+    VAL_
+    CAT_DEF_
+    CAT_
+    FILTER
+    BA_DEF_DEF_
+    EV_DATA_
+    ENVVAR_DATA_
+    SGTYPE_
+    SGTYPE_VAL_
+    BA_DEF_SGTYPE_
+    BA_SGTYPE_
+    SIG_TYPE_REF_
+    VAL_TABLE_
+    SIG_GROUP_
+    SIG_VALTYPE_
+    SIGTYPE_VALTYPE_
+    BO_TX_BU_
+    BA_DEF_REL_
+    BA_REL_
+    BA_DEF_DEF_REL_
+    BU_SG_REL_
+    BU_EV_REL_
+    BU_BO_REL_
+    SG_MUL_VAL_
+
+BS_:
+
+BU_: FAKE_ECU
+
+BO_ 256 VEHICLE_STATUS: 8 FAKE_ECU
+ SG_ Speed : 0|16@1+ (0.01,0) [0|655.35] "km/h" Vector__XXX
+ SG_ RPM : 16|16@1+ (0.25,0) [0|16383.75] "rpm" Vector__XXX
+ SG_ BatteryTemp : 32|8@1+ (1,-40) [-40|215] "degC" Vector__XXX
+
+CM_ BO_ 256 "Fake vehicle status message for CAN-Net Stage 2 Task 7";
+CM_ SG_ 256 Speed "Vehicle speed";
+CM_ SG_ 256 RPM "Engine RPM";
+CM_ SG_ 256 BatteryTemp "Battery temperature";
