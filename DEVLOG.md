@@ -263,3 +263,19 @@
 - Learned west build-directory workaround for apps living outside zephyr_project:
   `west build -b <board> <app_path> -d <app_path>/build` lets west build our own
   app while still using the zephyr_project workspace/toolchain.
+
+### Task 16: Document RTOS scheduling parameters
+- Wrote docs/rtos_scheduling_notes.md covering thread priorities (Zephyr:
+  lower number = higher priority, opposite of FreeRTOS's convention - worth
+  knowing per-RTOS), stack sizing considerations (1024B per thread was
+  generous for these simple demo tasks; real embedded work needs profiling,
+  not guessing), and the three core timing primitives used across Stage 4
+  (k_sleep for voluntary yield/periods, k_busy_wait for CPU-bound work,
+  k_uptime_get for timestamping).
+- Documented the native_sim virtual-clock gotcha discovered in Task 15 in
+  detail, since it's a genuinely reusable lesson for any future Zephyr work
+  on this simulator.
+- Restated the Task 15 preemption evidence in writeup form with an
+  interview-ready summary paragraph.
+
+## Stage 4 — COMPLETE (4/4 tasks)
