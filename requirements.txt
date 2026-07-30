@@ -1,0 +1,4 @@
+python-can==4.6.1
+cantools==42.0.3
+pyserial==3.5
+matplotlib==3.11.1
