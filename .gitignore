@@ -8,3 +8,6 @@ __pycache__/
 # Only our custom application code (stage4_rtos/) should be tracked.
 zephyr_project/
 zephyr_venv/
+
+# Zephyr application build output (generated, not our source)
+stage4_rtos/*/build/

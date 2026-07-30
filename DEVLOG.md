@@ -238,3 +238,28 @@
   (~1GB+) externally-reproducible directories (`west init` + `west update` +
   `west sdk install` recreates them exactly), not our own code, so only our
   custom application source will be tracked going forward.
+
+### Task 15: Second task at different priority/period, demonstrate preemption
+- Built stage4_rtos/preemption_demo/: standalone Zephyr app (own CMakeLists.txt +
+  prj.conf, separate from zephyr_project's built-in samples) with two threads -
+  high_priority_task (priority 2, wakes every 500ms) and low_priority_task
+  (priority 5, runs an 800ms CPU-bound busy-wait each cycle - deliberately
+  longer than HIGH's wake period, to force a preemption scenario).
+- Important gotcha discovered and fixed: an initial version used a manual
+  while-loop spinning on k_uptime_get() to busy-wait. This hung forever under
+  native_sim, because native_sim's virtual clock only advances at kernel
+  scheduling events (thread sleep/block) - a tight spin loop that never yields
+  never lets simulated time progress, so the "800ms" wait never completed.
+  Fixed by switching to Zephyr's own k_busy_wait() primitive, which correctly
+  integrates with native_sim's virtual-time model (as well as real hardware).
+  This is a genuine, documented native_sim nuance worth remembering for any
+  future Zephyr work.
+- Verified preemption with real timestamped evidence: e.g. LOW starts its
+  800ms busy-wait at t=50ms (expected to run uninterrupted until t=850ms), but
+  HIGH's log line appears at t=560ms - squarely inside LOW's busy-wait window -
+  and LOW still finishes at exactly t=850ms (50+800), proving it was suspended
+  and resumed correctly by the scheduler rather than corrupted or restarted.
+  This pattern repeated consistently across dozens of cycles in a 37-second run.
+- Learned west build-directory workaround for apps living outside zephyr_project:
+  `west build -b <board> <app_path> -d <app_path>/build` lets west build our own
+  app while still using the zephyr_project workspace/toolchain.
