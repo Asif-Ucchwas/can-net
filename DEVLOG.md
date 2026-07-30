@@ -279,3 +279,94 @@
   interview-ready summary paragraph.
 
 ## Stage 4 — COMPLETE (4/4 tasks)
+
+## Stage 5 — Benchmarking
+
+### Task 17: Design a repeatable test protocol
+- Wrote stage5_benchmarking/TEST_PROTOCOL.md defining the full methodology
+  upfront, before running anything - fixed message set (real J1939 EEC1/CCVS1
+  signals from Stage 3, not new test data), 2 independent variables (bus load:
+  1/5/15 publishers; message rate: 10Hz/100Hz) giving 6 configurations, 20
+  trials per configuration (120 total runs), 3 metrics per trial (latency,
+  drop rate, throughput).
+- Documented methodology choice explicitly: 20 trials is fewer than the
+  thesis's 50-trial standard, calibrated instead for this software-only/8GB
+  RAM laptop context - flagged as a deliberate scope decision, not silently
+  presented as equivalent rigor.
+
+### Task 18: Instrument and log latency, drop rate, throughput
+- Built stage5_benchmarking/bench_can.py implementing TEST_PROTOCOL.md: threaded
+  publisher(s)/receiver measuring real send-to-receive latency via perf_counter()
+  timestamps packed into dedicated benchmark CAN frames (id=0x7DF).
+- Documented deliberate tradeoff: benchmark frames carry a raw timestamp payload,
+  not a real J1939-encoded signal, since 8 bytes can't hold both precise timing
+  data and a realistic signal value - Stage 2/3 already validated real signal
+  encoding separately, so this stage prioritizes timing precision instead.
+- Validated logic with a reduced smoke test (1 config, 2 trials) before
+  committing to the full run - confirmed 0% drop, sane sub-ms latency, correct
+  throughput math, no hangs/errors.
+- Ran full protocol: 6 configurations x 20 trials = 120 total trials, saved to
+  bench_results_raw.json. Summary (avg across 20 trials per config):
+    1 pub,  10Hz: 0.00% drop, 10.4 msg/s,   0.28ms avg latency
+    1 pub, 100Hz: 0.00% drop, 100.4 msg/s,  0.24ms avg latency
+    5 pub,  10Hz: 0.00% drop, 51.6 msg/s,   0.29ms avg latency
+    5 pub, 100Hz: 0.00% drop, 501.8 msg/s,  0.24ms avg latency
+    15 pub, 10Hz: 0.03% drop, 156.6 msg/s,  0.50ms avg latency
+    15 pub,100Hz: 0.89% drop, 1499.8 msg/s, 5.17ms avg latency
+- Result shows genuine, meaningful degradation under heavy load (15 publishers
+  @ 100Hz) - both drop rate and latency increase noticeably, confirming the
+  bus genuinely saturates under stress rather than scaling linearly forever.
+
+### Task 19: Run full benchmark suite, produce plots/tables
+- Built stage5_benchmarking/analyze_results.py: parses bench_results_raw.json,
+  computes per-config averages, prints a summary table, and generates 3 plots
+  (drop rate vs load, latency vs load, throughput vs load) plus a markdown
+  table (BENCHMARK_RESULTS.md) for the repo.
+- Gotcha hit and fixed: matplotlib's default backend tries to open an
+  interactive display window, which hangs indefinitely under WSL2 (no display
+  server). Fixed with `matplotlib.use('Agg')` (non-interactive, file-only
+  backend) set before importing pyplot - a common headless-environment
+  requirement worth remembering for any future matplotlib work in WSL2/CI.
+- Key finding beyond the averages already noted in Task 18: MAX latency shows
+  a striking tail-latency effect under heavy load - avg latency at 15
+  publishers/10Hz is a modest 0.50ms, but MAX latency spikes to 38.5ms; at
+  15 publishers/100Hz, avg is 5.17ms but MAX reaches 284.3ms. This means most
+  messages stay fast even under heavy load, but a meaningful minority get
+  significantly delayed - a real-time-systems-relevant nuance that averages
+  alone would have hidden completely.
+- Outputs: BENCHMARK_RESULTS.md, plot_drop_rate.png, plot_latency.png,
+  plot_throughput.png - all saved in stage5_benchmarking/.
+
+### Task 20: Compare CAN vs UDP vs TCP for the same simulated telemetry task
+- Built bench_tcp_udp.py using the EXACT same methodology as bench_can.py
+  (same 6 load configs, same 20-trial count, same perf_counter()-based
+  send-to-receive latency measurement) so the comparison is methodologically
+  fair, not just eyeballing differently-measured numbers from Stage 1.
+- Hit and fixed a real bug: an in-place Python string-replace to update the
+  __main__ block silently succeeded at the string level but left the block
+  in the wrong location in the file (before, not after, the new TCP function
+  definitions) - Python executed the stale block since it's top-to-bottom,
+  causing the script to silently rerun UDP instead of TCP. Fixed by removing
+  the misplaced block and appending a correct one at the true end of file.
+  Lesson: str.replace() based code edits need the result verified, not
+  assumed correct just because the script ran without erroring.
+- Ran full comparison: CAN Task 18/19 results vs new UDP suite (120 trials)
+  vs new TCP suite (120 trials). Saved to COMPARISON_RESULTS.md plus 2 plots
+  (plot_transport_comparison_latency.png, plot_transport_comparison_throughput.png).
+- KEY FINDING (with important caveat): on this virtual/software-only setup,
+  UDP and TCP consistently outperformed CAN in both latency and drop rate,
+  especially under heavy load - at 15 publishers/100Hz, CAN showed 0.89% drop
+  and 284.3ms max latency, while UDP/TCP stayed near 0% drop with max latency
+  under 50ms.
+- IMPORTANT CAVEAT (documented explicitly, not glossed over): this result
+  reflects vcan0's software queue implementation in the Linux kernel, NOT
+  real CAN bus electrical arbitration. Real CAN hardware is chosen for
+  safety-critical systems specifically because of hardware-level deterministic,
+  bounded-worst-case-latency arbitration enforced by actual bit-timing on a
+  physical wire - a virtual interface has none of that. This benchmark
+  measures "Linux's CAN software stack overhead vs Linux's socket stack
+  overhead on loopback," not "real CAN bus vs real network," and the paper
+  draft (Stage 6) must state this limitation clearly rather than imply CAN
+  is simply worse than UDP/TCP in general.
+
+## Stage 5 — COMPLETE (4/4 tasks)
