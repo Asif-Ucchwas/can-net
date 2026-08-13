@@ -370,3 +370,54 @@
   is simply worse than UDP/TCP in general.
 
 ## Stage 5 — COMPLETE (4/4 tasks)
+
+## DevOps-Rigor Retrofit — Coverage Snapshot (Bundle 5, Task 4)
+
+Ran pytest-cov across all 28 non-test Python files (5 stage directories).
+Blended total: 5% (1121 statements, 1061 uncovered) - this number alone
+is misleading and shouldn't be quoted without the breakdown below, since
+the vast majority of "uncovered" code is live I/O (sockets, vcan0,
+serial) that pytest was never the right tool for.
+
+**Unit-tested (pytest, 35 tests):**
+- `stage3_j1939/j1939_ids.py` - 74% (PGN/SPN bit-packing, priority/source
+  address encode-decode; untested lines are argument-validation edges
+  not exercised by the current parametrized cases)
+- `stage3_j1939/j1939_signals.py` - 77% (Engine Speed/Vehicle Speed
+  signal encode-decode, clamping)
+- `stage3_j1939/j1939_bam.py` - 66% (fragmentation/reassembly logic;
+  untested lines are the live-transmission helper functions, not the
+  pure fragment/reassemble math that the tests actually target)
+
+**Verified by other means, not unit-tested (25 files, 0% by design):**
+- `stage1_networking/*` - TCP/UDP/serial clients, servers, and
+  benchmarking scripts; these are live network I/O, verified via the
+  Stage 1 benchmark table (documented latency/throughput/loss numbers
+  in BENCHMARKS.md) rather than pytest, which can't meaningfully unit
+  test a live socket without extensive mocking that would test the mock,
+  not the behavior
+- `stage2_can/*` - CAN publisher/subscriber/DBC tooling against a real
+  vcan0 interface; verified via live cansend/candump traffic and the
+  documented bus-contention/arbitration analysis
+- `stage3_j1939/j1939_bam_sender.py`, `_receiver.py`,
+  `_multi_receiver.py`, `_stress_sender.py`, `j1939_publisher.py`,
+  `j1939_subscriber.py`, `j1939_diagnostic_tool.py`,
+  `j1939_ecu_responder.py` - these are the live-transmission wrappers
+  around the pure BAM/PGN logic in j1939_bam.py/j1939_ids.py (which IS
+  unit-tested); verified via the multi-ECU stress test and diagnostic
+  request/response cycle documented in DEVLOG
+- `stage5_benchmarking/*` - the 360-trial benchmark suite itself;
+  verified by its own documented protocol (TEST_PROTOCOL.md, 6 configs x
+  20 trials) and cross-checked results (COMPARISON_RESULTS.md), not unit
+  tests
+- `assets/generate_architecture_diagram.py` - one-off diagram-generation
+  script, not part of the tested system
+
+**Bottom line:** the pure protocol math (J1939 bit-packing, signal
+encode/decode, BAM fragment/reassembly) is unit-tested at 66-77%
+line coverage. The live I/O layer wrapping that math - sockets, vcan0,
+serial - was verified end-to-end through the repo's own 360-trial
+benchmark methodology instead, which is the more meaningful test for
+code whose entire job is talking to a real (or virtual) bus correctly
+under real timing and contention, not something a mocked-socket unit
+test would actually prove.
