@@ -1,5 +1,7 @@
 # CAN-Net: Embedded Networking & Real-Time CAN Bus Communication Stack
 
+[![Tests](https://github.com/Asif-Ucchwas/can-net/actions/workflows/tests.yml/badge.svg)](https://github.com/Asif-Ucchwas/can-net/actions/workflows/tests.yml)
+
 A from-scratch, task-based build of an embedded networking stack — covering
 general transport protocols, CAN bus fundamentals, the J1939 vehicle
 protocol, RTOS integration, and a rigorous benchmark comparison — built
@@ -73,6 +75,36 @@ in DEVLOG.md under Task 20.
 - Setup: pip install -r requirements.txt, then ./setup_vcan.sh to bring up
   the virtual CAN interface (needed once per session - it does not persist
   across restarts)
+
+## Testing & Build
+
+**Coverage:** 3 of 28 Python files are unit-tested (pytest, 35 tests) -
+the pure J1939 protocol math (`j1939_ids.py` 74%, `j1939_signals.py`
+77%, `j1939_bam.py` 66%). The remaining 25 files are live network/CAN
+I/O scripts, verified instead via the 360-trial benchmark methodology
+below rather than unit tests. Full honest breakdown in DEVLOG.md's
+DevOps-Rigor coverage snapshot entry.
+
+**Run tests:**
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt -r requirements-dev.txt
+pytest tests/ -v --cov=stage3_j1939 --cov-report=term-missing
+```
+
+**CI:** GitHub Actions runs the full test suite on every push/PR -
+see `.github/workflows/tests.yml` (badge at the top of this README).
+
+**Build clean (Zephyr/RTOS):**
+```bash
+python3 -m venv zephyr_venv && source zephyr_venv/bin/activate
+pip install west
+west init zephyr_project && cd zephyr_project && west update
+pip install -r zephyr/scripts/requirements.txt  # required before sdk install
+west sdk install
+```
+Verified end-to-end from a genuinely fresh install (system deps, venv,
+Zephyr source tree, SDK) - see DEVLOG.md's Zephyr Build Audit entry.
 
 ## Development Log
 
