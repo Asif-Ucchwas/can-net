@@ -472,3 +472,31 @@ Bottom line: both this repo's own custom application (preemption_demo)
 and Zephyr's own sample build and run correctly from a completely fresh
 clone/install, given the documented steps plus the one missing
 requirements.txt step now identified.
+
+## DevOps-Rigor Stage 3 — Production-Grade Practices (Tasks 9-11)
+
+Hardened stage2_can/can_publisher.py as this repo's Stage 3 target,
+covering all three tasks in one file:
+
+- Structured logging: replaced print() with Python's logging module,
+  configurable level via LOG_LEVEL env var, timestamped
+  level/logger-name-prefixed output. Verified DEBUG-level per-frame
+  logs stay silent at the default INFO level, confirming filtering
+  actually works, not just configured.
+- Error handling: can.interface.Bus() previously had no error handling
+  at all - a bad/down interface crashed with a raw traceback. Now
+  catches OSError, logs a clear message with a concrete fix suggestion
+  ("Is the interface up? Try: sudo ip link set <chan> up type vcan"),
+  and exits cleanly (code 1) instead of crashing. Verified live against
+  a genuinely nonexistent interface (CAN_CHANNEL=nonexistent_vcan) -
+  clean ERROR log, no traceback, correct exit code. Also wrapped
+  bus.send() to log and skip on can.CanError rather than crashing the
+  whole publish loop on one bad frame.
+- Config externalization: CHANNEL, BUSTYPE, and send interval were
+  hardcoded module constants - now CAN_CHANNEL, CAN_BUSTYPE,
+  CAN_SEND_INTERVAL_S env vars (with the original values as defaults,
+  so existing usage is unaffected).
+
+Verified both the success path (real vcan0, INFO logs showing socket
+creation and send-loop start) and the failure path (nonexistent
+interface, clean error + exit) before committing.
