@@ -1,5 +1,8 @@
 # CAN-Net: Embedded Networking & Real-Time CAN Bus Communication Stack
 
+![banner](assets/banner-can-net.png)
+
+
 A from-scratch, task-based build of an embedded networking stack — covering
 general transport protocols, CAN bus fundamentals, the J1939 vehicle
 protocol, RTOS integration, and a rigorous benchmark comparison — built
