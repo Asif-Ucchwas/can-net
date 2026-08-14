@@ -31,9 +31,16 @@ entirely in software/emulation (no physical hardware required).
 
 Note on the Zephyr toolchain: zephyr_project/ (the Zephyr source tree + SDK,
 ~1GB+) and zephyr_venv/ (its Python virtual environment) are intentionally
-not committed to this repo - they are fully reproducible via west init,
-west update, and west sdk install. Only the custom application code in
-stage4_rtos/preemption_demo/ is tracked.
+not committed to this repo - they are fully reproducible via:
+1. `python3 -m venv zephyr_venv && source zephyr_venv/bin/activate && pip install west`
+2. `west init zephyr_project && cd zephyr_project && west update`
+3. `pip install -r zephyr/scripts/requirements.txt` (required before the
+   next step - west sdk install depends on packages declared here, e.g.
+   patool, that aren't pulled in by installing west alone)
+4. `west sdk install`
+
+Only the custom application code in stage4_rtos/preemption_demo/ is
+tracked.
 
 ## Benchmark Results
 

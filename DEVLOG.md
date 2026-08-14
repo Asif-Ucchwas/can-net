@@ -421,3 +421,54 @@ benchmark methodology instead, which is the more meaningful test for
 code whose entire job is talking to a real (or virtual) bus correctly
 under real timing and contention, not something a mocked-socket unit
 test would actually prove.
+
+## DevOps-Rigor Stage 2 — Zephyr Build Audit (Task 7)
+
+Verified this repo's Zephyr toolchain reproduces cleanly from a genuinely
+fresh state - no zephyr_project/, no zephyr_venv/, ZEPHYR_BASE unset -
+following exactly the steps documented in this DEVLOG's Stage 4 entries
+and the README's reproduction note.
+
+Steps taken:
+- Installed Zephyr's documented Ubuntu system dependencies (cmake,
+  ninja-build, device-tree-compiler, gcc-multilib, gperf, ccache,
+  dfu-util, libsdl2-dev, etc.) - all were either already present or
+  installed cleanly via apt
+- Created a fresh zephyr_venv, installed west (v1.5.0)
+- `west init zephyr_project` + `west update` - pulled the full Zephyr
+  source tree and module repos successfully
+- `west sdk install` - initially failed with
+  `ModuleNotFoundError: No module named 'patoolib'`
+
+Real documentation gap found: `pip install west` alone is not sufficient
+to reproduce this environment. `west sdk install` (and presumably other
+west extension commands) depend on packages declared in
+`zephyr/scripts/requirements.txt` (patool, and a large set of other
+build/tooling dependencies), which is only available after `west
+update` has pulled the zephyr/ source tree - a real chicken-and-egg
+step neither this DEVLOG nor the README previously documented. Fixed
+by running `pip install -r zephyr/scripts/requirements.txt` before
+retrying `west sdk install`, which then succeeded. README updated in
+this same commit to document the correct four-step sequence.
+
+Full end-to-end verification after the fix:
+- `west build -b qemu_cortex_m3 zephyr/samples/hello_world` -> 134/134
+  targets, FLASH 3.70%, RAM 6.27% - identical numbers to the original
+  Stage 4 Task 13 run, confirming the fresh toolchain matches exactly
+- Ran under QEMU, printed "Hello World! qemu_cortex_m3/ti_lm3s6965"
+- Built and ran this repo's own stage4_rtos/preemption_demo against
+  native_sim (not just a Zephyr-provided sample) - confirmed the same
+  preemption pattern as the original Task 15 run: HIGH (priority 2)
+  interrupts LOW's (priority 5) 800ms busy-wait mid-cycle, LOW still
+  completes correctly afterward (e.g. STARTING at t=275850ms, HIGH runs
+  at t=276080ms, FINISHED at t=276690ms - 840ms elapsed instead of the
+  base 800ms, accounting for the preemption)
+
+Also noted the same ccache version warning as the original setup
+(ccache 4.9.1 found, Zephyr wants >=4.12) - confirmed harmless, same
+conclusion as before, not worth fixing for this project.
+
+Bottom line: both this repo's own custom application (preemption_demo)
+and Zephyr's own sample build and run correctly from a completely fresh
+clone/install, given the documented steps plus the one missing
+requirements.txt step now identified.
