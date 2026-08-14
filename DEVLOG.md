@@ -370,3 +370,152 @@
   is simply worse than UDP/TCP in general.
 
 ## Stage 5 — COMPLETE (4/4 tasks)
+
+## DevOps-Rigor Retrofit — Coverage Snapshot (Bundle 5, Task 4)
+
+Ran pytest-cov across all 28 non-test Python files (5 stage directories).
+Blended total: 5% (1121 statements, 1061 uncovered) - this number alone
+is misleading and shouldn't be quoted without the breakdown below, since
+the vast majority of "uncovered" code is live I/O (sockets, vcan0,
+serial) that pytest was never the right tool for.
+
+**Unit-tested (pytest, 35 tests):**
+- `stage3_j1939/j1939_ids.py` - 74% (PGN/SPN bit-packing, priority/source
+  address encode-decode; untested lines are argument-validation edges
+  not exercised by the current parametrized cases)
+- `stage3_j1939/j1939_signals.py` - 77% (Engine Speed/Vehicle Speed
+  signal encode-decode, clamping)
+- `stage3_j1939/j1939_bam.py` - 66% (fragmentation/reassembly logic;
+  untested lines are the live-transmission helper functions, not the
+  pure fragment/reassemble math that the tests actually target)
+
+**Verified by other means, not unit-tested (25 files, 0% by design):**
+- `stage1_networking/*` - TCP/UDP/serial clients, servers, and
+  benchmarking scripts; these are live network I/O, verified via the
+  Stage 1 benchmark table (documented latency/throughput/loss numbers
+  in BENCHMARKS.md) rather than pytest, which can't meaningfully unit
+  test a live socket without extensive mocking that would test the mock,
+  not the behavior
+- `stage2_can/*` - CAN publisher/subscriber/DBC tooling against a real
+  vcan0 interface; verified via live cansend/candump traffic and the
+  documented bus-contention/arbitration analysis
+- `stage3_j1939/j1939_bam_sender.py`, `_receiver.py`,
+  `_multi_receiver.py`, `_stress_sender.py`, `j1939_publisher.py`,
+  `j1939_subscriber.py`, `j1939_diagnostic_tool.py`,
+  `j1939_ecu_responder.py` - these are the live-transmission wrappers
+  around the pure BAM/PGN logic in j1939_bam.py/j1939_ids.py (which IS
+  unit-tested); verified via the multi-ECU stress test and diagnostic
+  request/response cycle documented in DEVLOG
+- `stage5_benchmarking/*` - the 360-trial benchmark suite itself;
+  verified by its own documented protocol (TEST_PROTOCOL.md, 6 configs x
+  20 trials) and cross-checked results (COMPARISON_RESULTS.md), not unit
+  tests
+- `assets/generate_architecture_diagram.py` - one-off diagram-generation
+  script, not part of the tested system
+
+**Bottom line:** the pure protocol math (J1939 bit-packing, signal
+encode/decode, BAM fragment/reassembly) is unit-tested at 66-77%
+line coverage. The live I/O layer wrapping that math - sockets, vcan0,
+serial - was verified end-to-end through the repo's own 360-trial
+benchmark methodology instead, which is the more meaningful test for
+code whose entire job is talking to a real (or virtual) bus correctly
+under real timing and contention, not something a mocked-socket unit
+test would actually prove.
+
+## DevOps-Rigor Stage 2 — Zephyr Build Audit (Task 7)
+
+Verified this repo's Zephyr toolchain reproduces cleanly from a genuinely
+fresh state - no zephyr_project/, no zephyr_venv/, ZEPHYR_BASE unset -
+following exactly the steps documented in this DEVLOG's Stage 4 entries
+and the README's reproduction note.
+
+Steps taken:
+- Installed Zephyr's documented Ubuntu system dependencies (cmake,
+  ninja-build, device-tree-compiler, gcc-multilib, gperf, ccache,
+  dfu-util, libsdl2-dev, etc.) - all were either already present or
+  installed cleanly via apt
+- Created a fresh zephyr_venv, installed west (v1.5.0)
+- `west init zephyr_project` + `west update` - pulled the full Zephyr
+  source tree and module repos successfully
+- `west sdk install` - initially failed with
+  `ModuleNotFoundError: No module named 'patoolib'`
+
+Real documentation gap found: `pip install west` alone is not sufficient
+to reproduce this environment. `west sdk install` (and presumably other
+west extension commands) depend on packages declared in
+`zephyr/scripts/requirements.txt` (patool, and a large set of other
+build/tooling dependencies), which is only available after `west
+update` has pulled the zephyr/ source tree - a real chicken-and-egg
+step neither this DEVLOG nor the README previously documented. Fixed
+by running `pip install -r zephyr/scripts/requirements.txt` before
+retrying `west sdk install`, which then succeeded. README updated in
+this same commit to document the correct four-step sequence.
+
+Full end-to-end verification after the fix:
+- `west build -b qemu_cortex_m3 zephyr/samples/hello_world` -> 134/134
+  targets, FLASH 3.70%, RAM 6.27% - identical numbers to the original
+  Stage 4 Task 13 run, confirming the fresh toolchain matches exactly
+- Ran under QEMU, printed "Hello World! qemu_cortex_m3/ti_lm3s6965"
+- Built and ran this repo's own stage4_rtos/preemption_demo against
+  native_sim (not just a Zephyr-provided sample) - confirmed the same
+  preemption pattern as the original Task 15 run: HIGH (priority 2)
+  interrupts LOW's (priority 5) 800ms busy-wait mid-cycle, LOW still
+  completes correctly afterward (e.g. STARTING at t=275850ms, HIGH runs
+  at t=276080ms, FINISHED at t=276690ms - 840ms elapsed instead of the
+  base 800ms, accounting for the preemption)
+
+Also noted the same ccache version warning as the original setup
+(ccache 4.9.1 found, Zephyr wants >=4.12) - confirmed harmless, same
+conclusion as before, not worth fixing for this project.
+
+Bottom line: both this repo's own custom application (preemption_demo)
+and Zephyr's own sample build and run correctly from a completely fresh
+clone/install, given the documented steps plus the one missing
+requirements.txt step now identified.
+
+## DevOps-Rigor Stage 3 — Production-Grade Practices (Tasks 9-11)
+
+Hardened stage2_can/can_publisher.py as this repo's Stage 3 target,
+covering all three tasks in one file:
+
+- Structured logging: replaced print() with Python's logging module,
+  configurable level via LOG_LEVEL env var, timestamped
+  level/logger-name-prefixed output. Verified DEBUG-level per-frame
+  logs stay silent at the default INFO level, confirming filtering
+  actually works, not just configured.
+- Error handling: can.interface.Bus() previously had no error handling
+  at all - a bad/down interface crashed with a raw traceback. Now
+  catches OSError, logs a clear message with a concrete fix suggestion
+  ("Is the interface up? Try: sudo ip link set <chan> up type vcan"),
+  and exits cleanly (code 1) instead of crashing. Verified live against
+  a genuinely nonexistent interface (CAN_CHANNEL=nonexistent_vcan) -
+  clean ERROR log, no traceback, correct exit code. Also wrapped
+  bus.send() to log and skip on can.CanError rather than crashing the
+  whole publish loop on one bad frame.
+- Config externalization: CHANNEL, BUSTYPE, and send interval were
+  hardcoded module constants - now CAN_CHANNEL, CAN_BUSTYPE,
+  CAN_SEND_INTERVAL_S env vars (with the original values as defaults,
+  so existing usage is unaffected).
+
+Verified both the success path (real vcan0, INFO logs showing socket
+creation and send-loop start) and the failure path (nonexistent
+interface, clean error + exit) before committing.
+
+## DevOps-Rigor Stage 3 — GitHub Actions CI (Task 12)
+
+Added .github/workflows/tests.yml: runs the Stage 1 pytest suite
+(35 tests) on every push and pull request, ubuntu-latest, Python 3.12,
+installing from the pinned requirements.txt + requirements-dev.txt.
+
+Caught a real YAML gotcha before committing: the top-level `on:` key
+parsed as the boolean `true` under PyYAML's default (YAML 1.1) loader
+- a well-known ambiguity with bare on/off/yes/no keys. GitHub Actions'
+own parser handles `on:` correctly as a special case regardless, so
+this likely would have worked unquoted, but quoted it ("on":) anyway
+to remove the ambiguity rather than rely on that.
+
+Verified the exact install + test commands the workflow runs, in a
+genuinely fresh venv (/tmp/ci_test_venv, not this repo's existing
+.venv) to approximate a clean GitHub-hosted runner as closely as
+possible locally: clean pip install of all pinned versions with no
+dependency conflicts, then 35/35 tests passing.

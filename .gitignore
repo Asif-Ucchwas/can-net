@@ -11,3 +11,6 @@ zephyr_venv/
 
 # Zephyr application build output (generated, not our source)
 stage4_rtos/*/build/
+.venv/
+.coverage
+.pytest_cache/
