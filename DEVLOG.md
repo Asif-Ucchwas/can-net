@@ -500,3 +500,22 @@ covering all three tasks in one file:
 Verified both the success path (real vcan0, INFO logs showing socket
 creation and send-loop start) and the failure path (nonexistent
 interface, clean error + exit) before committing.
+
+## DevOps-Rigor Stage 3 — GitHub Actions CI (Task 12)
+
+Added .github/workflows/tests.yml: runs the Stage 1 pytest suite
+(35 tests) on every push and pull request, ubuntu-latest, Python 3.12,
+installing from the pinned requirements.txt + requirements-dev.txt.
+
+Caught a real YAML gotcha before committing: the top-level `on:` key
+parsed as the boolean `true` under PyYAML's default (YAML 1.1) loader
+- a well-known ambiguity with bare on/off/yes/no keys. GitHub Actions'
+own parser handles `on:` correctly as a special case regardless, so
+this likely would have worked unquoted, but quoted it ("on":) anyway
+to remove the ambiguity rather than rely on that.
+
+Verified the exact install + test commands the workflow runs, in a
+genuinely fresh venv (/tmp/ci_test_venv, not this repo's existing
+.venv) to approximate a clean GitHub-hosted runner as closely as
+possible locally: clean pip install of all pinned versions with no
+dependency conflicts, then 35/35 tests passing.
